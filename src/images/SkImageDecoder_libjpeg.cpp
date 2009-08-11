@@ -779,7 +779,11 @@ protected:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#include <dlfcn.h>
 #include "SkTRegistry.h"
+
+#define HW_JPEG_CODEC_LIBRARY "libskiahw.so"
+void *mLibHandle = NULL;
 
 static SkImageDecoder* DFactory(SkStream* stream) {
     static const char gHeader[] = { 0xFF, 0xD8, 0xFF };
