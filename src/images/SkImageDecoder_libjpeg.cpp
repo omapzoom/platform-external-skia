@@ -809,6 +809,8 @@ protected:
 #include "SkTRegistry.h"
 
 #define HW_JPEG_CODEC_LIBRARY "libskiahw.so"
+#define HW_JPEGDEC_CODEC_LIBRARY "libskiahwdec.so"
+#define HW_JPEGENC_CODEC_LIBRARY "libskiahwenc.so"
 void *mLibHandle = NULL;
 
 static SkImageDecoder* DFactory(SkStream* stream) {
@@ -818,12 +820,43 @@ static SkImageDecoder* DFactory(SkStream* stream) {
     char buffer[HEADER_SIZE];
     size_t len = stream->read(buffer, HEADER_SIZE);
 
+    char libskia_dec[2] = {'0','\0'};
+    const char set[2] = {'0','\0'};
+    char cImageDecSizeThreshold[]="0000000000";
+    unsigned int Filesize, dImageDecSizeThreshold;
+    Filesize = stream->getLength();
+    property_get("jpeg.libskiahw.decoder.enable", libskia_dec, "0");
+    property_get("jpeg.libskiahw.decoder.thresh", cImageDecSizeThreshold, "0");
+    dImageDecSizeThreshold = atoi(cImageDecSizeThreshold);
+
     if (len != HEADER_SIZE) {
         return NULL;   // can't read enough
     }
     if (memcmp(buffer, gHeader, HEADER_SIZE)) {
         return NULL;
     }
+
+#ifdef TARGET_OMAP4
+
+     if (strcmp(libskia_dec, set) != 0)
+     {    
+       // Attempt to load the DSP jpeg decoder only if the image file size if more than the threshold
+       if (Filesize > dImageDecSizeThreshold)
+       {
+               SkDebugf("Threshold crossed. Attempting to load HW decoder...\n");
+               mLibHandle = ::dlopen(HW_JPEGDEC_CODEC_LIBRARY, RTLD_NOW);
+               if( mLibHandle == NULL ) {
+                       SkDebugf ("Failed to load libskiahwdec.so because %s", dlerror());
+               }
+               else SkDebugf ("Loaded libskiahwdec.so");
+       }
+        else
+        {       SkDebugf("Loading ARM decoder...\n");
+                mLibHandle = NULL;
+        }
+     }
+
+#else
 
     // attempt to load device-specific jpeg codec
     if (mLibHandle == NULL) {
@@ -833,6 +866,8 @@ static SkImageDecoder* DFactory(SkStream* stream) {
         }
         else SkDebugf ("Loaded libskiahw.so");
     }
+
+#endif
 
     if (mLibHandle != NULL){
         typedef SkImageDecoder* (*HWJpegDecFactory)();
@@ -848,7 +883,31 @@ static SkImageDecoder* DFactory(SkStream* stream) {
 
 static SkImageEncoder* EFactory(SkImageEncoder::Type t) {
 
+    char libskiahw_enc[2] = {'0','\0'};
+    const char set[2] = {'0','\0'};
+    char cImageEncSizeThreshold[]="0000000000";
+    property_get("jpeg.libskiahw.encoder.enable", libskiahw_enc, "0");
+
     if (SkImageEncoder::kJPEG_Type != t) return NULL;
+
+#ifdef TARGET_OMAP4
+
+     if (strcmp(libskiahw_enc, set) != 0)
+     {
+       //Attempt to load libskiahwenc only if the jpeg.libskiahw.encoder property is set to 1
+               SkDebugf("Attempting to load HW encoder...\n");
+               mLibHandle = ::dlopen(HW_JPEGENC_CODEC_LIBRARY, RTLD_NOW);
+               if( mLibHandle == NULL ) {
+                       SkDebugf ("Failed to load libskiahwenc.so because %s", dlerror());
+               }
+               else SkDebugf ("Loaded libskiahwenc.so");
+     }
+        else
+     {       SkDebugf("Loading ARM encoder...\n");
+             mLibHandle = NULL;
+     }
+
+#else
 
     // attempt to load device-specific jpeg codec
     if (mLibHandle == NULL) {
@@ -858,6 +917,8 @@ static SkImageEncoder* EFactory(SkImageEncoder::Type t) {
         }
         else SkDebugf ("Loaded libskiahw.so");
     }
+
+#endif
 
     if (mLibHandle != NULL){
         typedef SkImageEncoder* (*HWJpegEncFactory)();
