@@ -68,5 +68,45 @@ private:
     SkMSec      fMinToDump;
 };
 
+//////////////////////////////////////////////////////////////////////////
+
+class AutoTimeMicros {
+public:
+    AutoTimeMicros(const char label[]) : fLabel(label) {
+        if (!fLabel) {
+            fLabel = "";
+        }
+        gettimeofday(&fNow, NULL);
+        width = 0;
+        height = 0;
+    }
+    ~AutoTimeMicros() {
+        struct timeval tv;
+        unsigned long timeDiff = 0;
+        char str[250];
+        gettimeofday(&tv, NULL);
+        timeDiff = (unsigned long)((tv.tv_sec - fNow.tv_sec) * 1000000) + (tv.tv_usec - fNow.tv_usec);
+
+        strcpy(str, fLabel);
+        if(width != 0 && height !=0)
+        {
+            sprintf(str, "%s Input(%d x %d)", str, width, height);
+        }
+        SkDebugf("---- Time (ms): %s %lu us\n", str, timeDiff);
+
+    }
+
+    void setResolution(int width, int height){
+        this->width=width;
+        this->height=height;
+    }
+
+private:
+    const char* fLabel;
+    struct timeval fNow;
+    int width;
+    int height;
+};
+
 #endif
 
