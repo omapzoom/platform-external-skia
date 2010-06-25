@@ -195,6 +195,7 @@ LOCAL_SHARED_LIBRARIES := \
         libemoji \
 	libjpeg \
 	libutils \
+	libdl \
 	libz
 
 LOCAL_STATIC_LIBRARIES := \
