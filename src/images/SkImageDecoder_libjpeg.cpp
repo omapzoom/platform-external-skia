@@ -705,7 +705,55 @@ static SkImageDecoder* DFactory(SkStream* stream) {
 }
 
 static SkImageEncoder* EFactory(SkImageEncoder::Type t) {
-    return (SkImageEncoder::kJPEG_Type == t) ? SkNEW(SkJPEGImageEncoder) : NULL;
+     char libskiahw_enc[2] = {'0','\0'};
+     const char set[2] = {'0','\0'};
+     char cImageEncSizeThreshold[]="0000000000";
+     property_get("jpeg.libskiahw.encoder.enable", libskiahw_enc, "0");
+
+    if (SkImageEncoder::kJPEG_Type != t) return NULL;
+
+#ifdef TARGET_OMAP4
+
+     if (strcmp(libskiahw_enc, set) != 0)
+     {
+       //Attempt to load libskiahwenc only if the jpeg.libskiahw.encoder property is set to 1
+               SkDebugf("Attempting to load HW encoder...\n");
+               mLibHandle = ::dlopen(HW_JPEGENC_CODEC_LIBRARY, RTLD_NOW);
+               if( mLibHandle == NULL ) {
+                       SkDebugf ("Failed to load libskiahwenc.so because %s", dlerror());
+               }
+               else SkDebugf ("Loaded libskiahwenc.so");
+     }
+        else
+     {       SkDebugf("Loading ARM encoder...\n");
+             mLibHandle = NULL;
+     }
+
+ #else
+
+     // attempt to load device-specific jpeg codec
+     if (mLibHandle == NULL) {
+         mLibHandle = ::dlopen(HW_JPEG_CODEC_LIBRARY, RTLD_NOW);
+         if( mLibHandle == NULL ) {
+             SkDebugf ("Failed to load libskiahw.so because %s", dlerror());
+         }
+         else SkDebugf ("Loaded libskiahw.so");
+     }
+
+ #endif
+
+     if (mLibHandle != NULL){
+         typedef SkImageEncoder* (*HWJpegEncFactory)();
+         HWJpegEncFactory f = (HWJpegEncFactory) ::dlsym(mLibHandle, "SkImageEncoder_HWJPEG_Factory");
+         if (f != NULL) {
+             SkDebugf("\n\n####### Loaded Hardware Specific Jpeg Encoder Codec #######\n\n");
+             return f();
+         }
+         SkDebugf("Unable to Load Hardware Specific Jpeg Encoder Codec because: %s", dlerror());
+     }
+
+     // if no device-specific codec was loaded, use the generic one
+     return SkNEW(SkJPEGImageEncoder);
 }
 
 static SkTRegistry<SkImageDecoder*, SkStream*> gDReg(DFactory);
