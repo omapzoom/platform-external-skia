@@ -627,13 +627,16 @@ protected:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include <dlfcn.h>
 #include "SkTRegistry.h"
+
+#ifdef OMAP_ENHANCEMENT
+#include <dlfcn.h>
 
 #define HW_JPEG_CODEC_LIBRARY "libskiahw.so"
 #define HW_JPEGDEC_CODEC_LIBRARY "libskiahwdec.so"
 #define HW_JPEGENC_CODEC_LIBRARY "libskiahwenc.so"
 void *mLibHandle = NULL;
+#endif
 
 static SkImageDecoder* DFactory(SkStream* stream) {
     static const char gHeader[] = { 0xFF, 0xD8, 0xFF };
@@ -642,6 +645,7 @@ static SkImageDecoder* DFactory(SkStream* stream) {
     char buffer[HEADER_SIZE];
     size_t len = stream->read(buffer, HEADER_SIZE);
 
+#ifdef OMAP_ENHANCEMENT
     char libskia_dec[2] = {'0','\0'};
     const char set[2] = {'0','\0'};
     char cImageDecSizeThreshold[]="0000000000";
@@ -650,6 +654,7 @@ static SkImageDecoder* DFactory(SkStream* stream) {
     property_get("jpeg.libskiahw.decoder.enable", libskia_dec, "0");
     property_get("jpeg.libskiahw.decoder.thresh", cImageDecSizeThreshold, "0");
     dImageDecSizeThreshold = atoi(cImageDecSizeThreshold);
+#endif
 
     if (len != HEADER_SIZE) {
         return NULL;   // can't read enough
@@ -658,6 +663,7 @@ static SkImageDecoder* DFactory(SkStream* stream) {
         return NULL;
     }
 
+#ifdef OMAP_ENHANCEMENT
 #ifdef TARGET_OMAP4
 
      if (strcmp(libskia_dec, set) != 0)
@@ -701,10 +707,13 @@ static SkImageDecoder* DFactory(SkStream* stream) {
         SkDebugf("Unable to Load Hardware Specific Jpeg Decoder Codec because: %s", dlerror());
     }
 
+#endif
+
     return SkNEW(SkJPEGImageDecoder);
 }
 
 static SkImageEncoder* EFactory(SkImageEncoder::Type t) {
+#ifdef OMAP_ENHANCEMENT
      char libskiahw_enc[2] = {'0','\0'};
      const char set[2] = {'0','\0'};
      char cImageEncSizeThreshold[]="0000000000";
@@ -754,6 +763,8 @@ static SkImageEncoder* EFactory(SkImageEncoder::Type t) {
 
      // if no device-specific codec was loaded, use the generic one
      return SkNEW(SkJPEGImageEncoder);
+#endif
+ return (SkImageEncoder::kJPEG_Type == t) ? SkNEW(SkJPEGImageEncoder) : NULL;
 }
 
 static SkTRegistry<SkImageDecoder*, SkStream*> gDReg(DFactory);
