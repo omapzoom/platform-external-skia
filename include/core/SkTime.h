@@ -78,6 +78,7 @@ public:
         gettimeofday(&fNow, NULL);
         width = 0;
         height = 0;
+        scale_factor = -1;
     }
     ~AutoTimeMicros() {
         struct timeval tv;
@@ -91,6 +92,10 @@ public:
         {
             sprintf(str, "%s Input(%d x %d)", str, width, height);
         }
+        if(scale_factor != -1)
+        {
+            sprintf(str, "%s ScaleFactor(%d)", str, scale_factor);
+        }
         SkDebugf("---- Time (ms): %s %lu us\n", str, timeDiff);
 
     }
@@ -100,11 +105,16 @@ public:
         this->height=height;
     }
 
+    void setScaleFactor(int scale_factor){
+        this->scale_factor=scale_factor;
+    }
+
 private:
     const char* fLabel;
     struct timeval fNow;
     int width;
     int height;
+    int scale_factor;
 };
 
  ///////////////////////////////////////////////////////////////////////////////
