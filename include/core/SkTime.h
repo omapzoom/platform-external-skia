@@ -83,21 +83,24 @@ public:
     ~AutoTimeMicros() {
         struct timeval tv;
         unsigned long timeDiff = 0;
-        char str[250];
+        char *str = NULL;
         gettimeofday(&tv, NULL);
         timeDiff = (unsigned long)((tv.tv_sec - fNow.tv_sec) * 1000000) + (tv.tv_usec - fNow.tv_usec);
 
-        strcpy(str, fLabel);
-        if(width != 0 && height !=0)
-        {
-            sprintf(str, "%s Input(%d x %d)", str, width, height);
+        str =(char*) malloc( (strlen(fLabel)+50) );
+        if (str){
+            strcpy(str, fLabel);
+            if(width != 0 && height !=0)
+            {
+                sprintf(str, "%s Input(%d x %d)", str, width, height);
+            }
+            if(scale_factor != -1)
+            {
+                sprintf(str, "%s ScaleFactor(%d)", str, scale_factor);
+            }
+            SkDebugf("---- Time (ms): %s %lu us\n", str, timeDiff);
+            free(str);
         }
-        if(scale_factor != -1)
-        {
-            sprintf(str, "%s ScaleFactor(%d)", str, scale_factor);
-        }
-        SkDebugf("---- Time (ms): %s %lu us\n", str, timeDiff);
-
     }
 
     void setResolution(int width, int height){
