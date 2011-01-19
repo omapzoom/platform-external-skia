@@ -50,7 +50,16 @@ static boolean sk_fill_input_buffer(j_decompress_ptr cinfo) {
     // note that JPEG is happy with less than the full read,
     // as long as the result is non-zero
     if (bytes == 0) {
+#ifdef OMAP_ENHANCEMENT
+        SkDebugf("%s():%d:: !!!Premature end of JPEG file. Sending dummy EOI. \n",__FUNCTION__,__LINE__);
+
+        /* Insert a fake EOI marker */
+        src->fBuffer[0] = (JOCTET) 0xFF;
+        src->fBuffer[1] = (JOCTET) JPEG_EOI;
+        bytes = 2;
+#else
         return FALSE;
+#endif
     }
 
     src->current_offset += bytes;
