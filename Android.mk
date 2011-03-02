@@ -26,6 +26,10 @@ ifeq ($(ARCH_ARM_HAVE_NEON),true)
 	LOCAL_CFLAGS += -D__ARM_HAVE_NEON
 endif
 
+ifeq ($(TARGET_BOARD_PLATFORM),omap4)
+    LOCAL_CFLAGS += -DTARGET_OMAP4
+endif
+
 LOCAL_SRC_FILES:= \
 	src/core/Sk64.cpp \
 	src/core/SkBuffer.cpp \
@@ -196,6 +200,7 @@ LOCAL_SHARED_LIBRARIES := \
         libemoji \
 	libjpeg \
 	libutils \
+        libdl \
 	libz
 
 LOCAL_STATIC_LIBRARIES := \
