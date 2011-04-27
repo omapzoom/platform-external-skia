@@ -684,6 +684,9 @@ static void showme8(char *str, void *p, int len)
 	    strcat(buf, tbuf);
 	}
 	SkDebugf("%s\n", buf);
+#ifdef NEEDS_ARM_ERRATA_754319_754320
+    VFP_NOP;
+#endif
 }
 static void showme16(char *str, void *p, int len)
 {
@@ -698,6 +701,9 @@ static void showme16(char *str, void *p, int len)
 	    strcat(buf, tbuf);
 	}
 	SkDebugf("%s\n", buf);
+#ifdef NEEDS_ARM_ERRATA_754319_754320
+    VFP_NOP;
+#endif
 }
 #endif
 
