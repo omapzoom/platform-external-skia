@@ -20,7 +20,12 @@
 #include "SkPaint.h"
 #include "SkTemplates.h"
 
-//#define SPEW_PURGE_STATUS
+#ifdef OMAP_ENHANCEMENT
+#define SPEW_PURGE_STATUS
+#endif
+//Cache hashing is of little help since most of times within 1 or 2 traversal you end up matching
+//the font descriptor. Worst case occurences are not frequent. Ensure you enable computeChecksum()
+//in SkDescriptor.h, if you are planning to enable the below macro USE_CACHE_HASH
 //#define USE_CACHE_HASH
 //#define RECORD_HASH_EFFICIENCY
 
@@ -487,18 +492,33 @@ SkGlyphCache* SkGlyphCache::VisitCache(const SkDescriptor* desc,
     SkGlyphCache** hash = globals.fHash;
     unsigned index = desc_to_hashindex(desc);
     cache = hash[index];
+#ifdef OMAP_ENHANCEMENT
+    if (cache && cache->fDesc->equals(*desc)) {
+#else
     if (cache && *cache->fDesc == *desc) {
+#endif
         cache->detach(&globals.fHead);
         goto FOUND_IT;
     }
 #endif
 
+#ifdef OMAP_ENHANCEMENT
+#ifndef USE_CACHE_HASH
     for (cache = globals.fHead; cache != NULL; cache = cache->fNext) {
         if (cache->fDesc->equals(*desc)) {
             cache->detach(&globals.fHead);
             goto FOUND_IT;
         }
     }
+#endif
+#else
+    for (cache = globals.fHead; cache != NULL; cache = cache->fNext) {
+        if (cache->fDesc->equals(*desc)) {
+            cache->detach(&globals.fHead);
+            goto FOUND_IT;
+        }
+    }
+#endif
 
     /* Release the mutex now, before we create a new entry (which might have
         side-effects like trying to access the cache/mutex (yikes!)

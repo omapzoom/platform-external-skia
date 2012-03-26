@@ -14,7 +14,6 @@
     limitations under the License.
  */
 
-
 #define SCALE_FILTER_NAME       MAKENAME(_filter_DX_shaderproc)
 
 static void SCALE_FILTER_NAME(const SkBitmapProcState& s, int x, int y,
@@ -53,11 +52,82 @@ static void SCALE_FILTER_NAME(const SkBitmapProcState& s, int x, int y,
         fx = SkScalarToFixed(pt.fX) - (oneX >> 1);
     }
 
+#ifdef OMAP_ENHANCEMENT
+    SRCTYPE* row0_pld;
+    SRCTYPE* row1_pld;
+    DSTTYPE*  colors_pld;
+    unsigned src_size = sizeof(SRCTYPE);
+    //Cacheline width is 32 bytes or 8 * sizeof(int) for OMAP4
+    int pld_src;
+    int flag = 0; //To run pld at least once
+    if (src_size == 1) {
+        pld_src = 32;
+    } else if (src_size == 2) {
+        pld_src = 16;
+    } else if (src_size == 4) {
+       pld_src = 8;
+    }
+//Preloading destination array is not helping.
+//Commenting the code for futur use
+#if 0
+    unsigned dst_size = sizeof(DSTTYPE);
+    unsigned  pld_dst;
+    if (dst_size == 1) {
+        pld_dst = 32;
+    } else if (dst_size == 2) {
+        pld_dst = 16;
+    } else if (dst_size == 4) {
+        pld_dst = 8;
+    }
+#endif
+#ifdef TARGET_OMAP4
+     row0_pld = (SRCTYPE*)row0;
+     row1_pld = (SRCTYPE*)row1;
+     if (count > pld_src) {
+         __builtin_prefetch (row0_pld, 0, 3);
+         __builtin_prefetch (row0_pld + (1 * pld_src), 0, 3);
+         row0_pld = row0_pld + (2 * pld_src);
+
+         __builtin_prefetch (row1_pld, 0, 3);
+         __builtin_prefetch (row1_pld + (1 * pld_src), 0, 3);
+         row1_pld = row1_pld + (2 * pld_src);
+     }
+//Preloading destination array is not helping.
+//Commenting the code for futur use
+#if 0
+         colors_pld = (DSTTYPE*) colors;
+         __builtin_prefetch (colors_pld + (0 * pld_dst), 1, 2);
+         __builtin_prefetch (colors_pld + (1 * pld_dst), 1, 2);
+        //__builtin_prefetch (colors_pld + (2 * pld_dst), 1, 2);
+        //__builtin_prefetch (colors_pld + (3 * pld_dst), 1, 2);
+        colors_pld = colors_pld + (2 * pld_dst);
+#endif
+#endif
+#endif
+
 #ifdef PREAMBLE
     PREAMBLE(s);
 #endif
-    
+
     do {
+#ifdef OMAP_ENHANCEMENT
+#ifdef TARGET_OMAP4
+        if ((count >= pld_src) || (flag ==0)) {
+            __builtin_prefetch (row0_pld, 0, 3);
+            __builtin_prefetch (row1_pld, 0, 3);
+            row0_pld += pld_src;
+            row1_pld += pld_src;
+            flag = 1;
+//Preloading destination array is not helping.
+//Commenting the code for futur use
+#if 0
+        __builtin_prefetch (colors_pld + (0 * pld_dst), 1, 2);
+        colors_pld += pld_dst;
+#endif
+        }
+#endif
+#endif
+
         unsigned subX = TILEX_LOW_BITS(fx, maxX);
         unsigned x0 = TILEX_PROCF(fx, maxX);
         unsigned x1 = TILEX_PROCF((fx + oneX), maxX);

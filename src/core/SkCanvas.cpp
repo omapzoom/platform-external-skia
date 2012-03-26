@@ -1617,9 +1617,25 @@ void SkCanvas::drawTextOnPathHV(const void* text, size_t byteLength,
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkCanvas::drawPicture(SkPicture& picture) {
+#ifdef OMAP_ENHANCEMENT
+#ifdef SK_DEBUG
+    struct timeval tv;
+    unsigned long time1 = 0, time2 = 0;
+    gettimeofday(&tv, NULL);
+    time1 = (unsigned long)(tv.tv_sec * 1000000) + (tv.tv_usec);
+#endif
+#endif
     int saveCount = save();
     picture.draw(this);
     restoreToCount(saveCount);
+
+#ifdef OMAP_ENHANCEMENT
+#ifdef SK_DEBUG
+    gettimeofday(&tv, NULL);
+    time2 = (unsigned long)(tv.tv_sec * 1000000) + (tv.tv_usec);
+    SkDebugf("In SkCanvas::drawPicture Enter=%lu::Timespend=%lu us\n", time1, (time2-time1));
+#endif
+#endif
 }
 
 void SkCanvas::drawShape(SkShape* shape) {

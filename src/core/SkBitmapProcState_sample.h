@@ -79,6 +79,36 @@ void MAKENAME(_nofilter_DX)(const SkBitmapProcState& s,
     xy += 1;
     
     SRCTYPE src;
+
+#ifdef OMAP_ENHANCEMENT
+    SRCTYPE* srcAddr_pld;
+    uint32_t* xy_pld;
+    unsigned src_size = sizeof(SRCTYPE);
+    //Cacheline width is 32 bytes or 8 * sizeof(int)
+    int pld_step;
+    int flag = 0; //To run pld at least once
+    if (src_size == 1) {
+        pld_step = 32;
+    } else if (src_size == 2) {
+        pld_step = 16;
+    } else if (src_size == 4) {
+        pld_step = 8;
+    }
+#ifdef TARGET_OMAP4
+    xy_pld = (uint32_t*) xy;
+    srcAddr_pld = (SRCTYPE*) srcAddr ;
+
+    if (count > pld_step) {
+        __builtin_prefetch (xy_pld, 0, 3);
+        __builtin_prefetch (xy_pld + (1 * 8), 0, 3);
+          xy_pld = (xy_pld + (2*8));
+
+        __builtin_prefetch (srcAddr_pld, 0, 3);
+        __builtin_prefetch (srcAddr_pld + (1 * pld_step), 0, 3);
+          srcAddr_pld = (srcAddr_pld + (2*8));
+     }
+#endif
+#endif
     
     if (1 == s.fBitmap->width()) {
         src = srcAddr[0];
@@ -87,13 +117,25 @@ void MAKENAME(_nofilter_DX)(const SkBitmapProcState& s,
     } else {
         int i;
         for (i = (count >> 2); i > 0; --i) {
+#ifdef OMAP_ENHANCEMENT
+#ifdef TARGET_OMAP4
+            if ((count >= pld_step) || (flag ==0)) {
+                __builtin_prefetch (xy_pld, 0, 3);
+                __builtin_prefetch (srcAddr_pld, 0, 3);
+                xy_pld = (xy_pld + (1*8));
+                srcAddr_pld += pld_step;
+                flag = 1;
+            }
+#endif
+#endif
             uint32_t xx0 = *xy++;
             uint32_t xx1 = *xy++;
+
             SRCTYPE x0 = srcAddr[UNPACK_PRIMARY_SHORT(xx0)];
             SRCTYPE x1 = srcAddr[UNPACK_SECONDARY_SHORT(xx0)];
             SRCTYPE x2 = srcAddr[UNPACK_PRIMARY_SHORT(xx1)];
             SRCTYPE x3 = srcAddr[UNPACK_SECONDARY_SHORT(xx1)];
-            
+
             *colors++ = RETURNDST(x0);
             *colors++ = RETURNDST(x1);
             *colors++ = RETURNDST(x2);
@@ -129,6 +171,31 @@ void MAKENAME(_filter_DX)(const SkBitmapProcState& s,
     const SRCTYPE* SK_RESTRICT row0;
     const SRCTYPE* SK_RESTRICT row1;
 
+#ifdef OMAP_ENHANCEMENT
+    SRCTYPE* row0_pld;
+    SRCTYPE* row1_pld;
+    uint32_t*  xy_pld;
+    unsigned src_size = sizeof(SRCTYPE);
+    //Cacheline width is 32 bytes or 8 * sizeof(int) for OMAP4
+    int pld_step;
+    int flag = 0; //To run pld at least once
+    if (src_size == 1) {
+        pld_step = 32;
+    } else if (src_size == 2) {
+        pld_step = 16;
+    } else if (src_size == 4) {
+        pld_step = 8;
+    }
+#ifdef TARGET_OMAP4
+    xy_pld = (uint32_t*) xy;
+    if (count > pld_step) {
+        __builtin_prefetch (xy_pld, 0, 3);
+        __builtin_prefetch (xy_pld  + (1 * 8), 0, 3);
+        xy_pld = (xy_pld + (2*8));
+    }
+#endif
+#endif
+
     // setup row ptrs and update proc_table
     {
         uint32_t XY = *xy++;
@@ -137,8 +204,38 @@ void MAKENAME(_filter_DX)(const SkBitmapProcState& s,
         row1 = (const SRCTYPE*)(srcAddr + (XY & 0x3FFF) * rb);
         subY = y0 & 0xF;
     }
-    
+
+#ifdef OMAP_ENHANCEMENT
+#ifdef TARGET_OMAP4
+    row0_pld = (SRCTYPE*)row0;
+    row1_pld = (SRCTYPE*)row1;
+    if (count > pld_step) {
+        __builtin_prefetch (row0_pld, 0, 3);
+        __builtin_prefetch (row0_pld + (1 * pld_step), 0, 3);
+        row0_pld = (row0_pld + (2 * pld_step));
+
+        __builtin_prefetch (row1_pld, 0, 3);
+        __builtin_prefetch (row1_pld + (1 * pld_step), 0, 3);
+        row1_pld = (row1_pld + (2 * pld_step));
+     }
+#endif
+#endif
+
     do {
+#ifdef OMAP_ENHANCEMENT
+#ifdef TARGET_OMAP4
+        if ((count >= pld_step) || (flag == 0)) {
+            __builtin_prefetch (xy_pld, 0, 3);
+            __builtin_prefetch (row0_pld, 0, 3);
+            __builtin_prefetch (row1_pld, 0, 3);
+            xy_pld = (xy_pld + (1*8));
+            row0_pld += pld_step;
+            row1_pld += pld_step;
+            flag = 1;
+        }
+#endif
+#endif
+
         uint32_t XX = *xy++;    // x0:14 | 4 | x1:14
         unsigned x0 = XX >> 14;
         unsigned x1 = XX & 0x3FFF;

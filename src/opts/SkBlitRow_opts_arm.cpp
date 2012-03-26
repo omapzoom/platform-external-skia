@@ -28,15 +28,37 @@
 #endif
 
 #if defined(__ARM_HAVE_NEON) && defined(SK_CPU_LENDIAN)
+
+#ifdef OMAP_ENHANCEMENT
+extern "C" void S32A_Opaque_BlitRow32_neon2(SkPMColor* SK_RESTRICT dst,
+                                            const SkPMColor* SK_RESTRICT src,
+                                            int count, U8CPU alpha);
+#endif
+
 static void S32A_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
                                   const SkPMColor* SK_RESTRICT src, int count,
                                   U8CPU alpha, int /*x*/, int /*y*/) {
     SkASSERT(255 == alpha);
+#ifdef OMAP_ENHANCEMENT
+    int keep_count = count;
+#endif
 
     if (count >= 8) {
+#ifdef OMAP_ENHANCEMENT
+        uint16_t* SK_RESTRICT keep_dst = NULL;
+#else
         uint16_t* SK_RESTRICT keep_dst;
-        
+#endif
         asm volatile (
+#ifdef OMAP_ENHANCEMENT
+#ifdef TARGET_OMAP4
+                      "pld        [%[dst],#(0 * 32)]          \n\t"
+                      "pld        [%[src],#(0 * 32)]          \n\t"
+#else
+                      "pld        [%[dst],#(0 * 64)]          \n\t"
+                      "pld        [%[src],#(0 * 64)]          \n\t"
+#endif
+#endif
                       "ands       ip, %[count], #7            \n\t"
                       "vmov.u8    d31, #1<<7                  \n\t"
                       "vld1.16    {q12}, [%[dst]]             \n\t"
@@ -49,15 +71,27 @@ static void S32A_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
                       "subs       %[count], %[count], ip      \n\t"
                       "b          9f                          \n\t"
                       // LOOP
-                      "2:                                         \n\t"
+                      "2:                                     \n\t"
                       
                       "vld1.16    {q12}, [%[dst]]!            \n\t"
                       "vld4.8     {d0-d3}, [%[src]]!          \n\t"
                       "vst1.16    {q10}, [%[keep_dst]]        \n\t"
                       "sub        %[keep_dst], %[dst], #8*2   \n\t"
                       "subs       %[count], %[count], #8      \n\t"
-                      "9:                                         \n\t"
+                      "9:                                     \n\t"
+#ifdef OMAP_ENHANCEMENT
+#ifdef TARGET_OMAP4
+                      "pld        [%[dst],#(0 * 32)]          \n\t"
+                      "pld        [%[dst],#(1 * 32)]          \n\t"
+                      "pld        [%[src],#(0 * 32)]          \n\t"
+                      "pld        [%[src],#(1 * 32)]          \n\t"
+#else
+                      "pld        [%[dst],#(0 * 64)]          \n\t"
+                      "pld        [%[src],#(0 * 64)]          \n\t"
+#endif
+#else
                       "pld        [%[dst],#32]                \n\t"
+#endif
                       // expand 0565 q12 to 8888 {d4-d7}
                       "vmovn.u16  d4, q12                     \n\t"
                       "vshr.u16   q11, q12, #5                \n\t"
@@ -99,7 +133,7 @@ static void S32A_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
                       
                       "bne        2b                          \n\t"
                       
-                      "1:                                         \n\t"
+                      "1:                                     \n\t"
                       "vst1.16      {q10}, [%[keep_dst]]      \n\t"
                       : [count] "+r" (count)
                       : [dst] "r" (dst), [keep_dst] "r" (keep_dst), [src] "r" (src) 
@@ -110,8 +144,16 @@ static void S32A_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
     }
     else 
     {   // handle count < 8
+#ifdef OMAP_ENHANCEMENT
+        uint16_t* SK_RESTRICT keep_dst = NULL;
+        if (keep_count < 8) {
+            __builtin_prefetch(dst);
+            __builtin_prefetch(src);
+        }
+#else
         uint16_t* SK_RESTRICT keep_dst;
-        
+#endif
+
         asm volatile (
                       "vmov.u8    d31, #1<<7                  \n\t"
                       "mov        %[keep_dst], %[dst]         \n\t"
@@ -121,19 +163,19 @@ static void S32A_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
                       "vld1.16    {d25}, [%[dst]]!            \n\t"
                       "vld1.32    {q1}, [%[src]]!             \n\t"
                       
-                      "14:                                        \n\t"
+                      "14:                                    \n\t"
                       "tst        %[count], #2                \n\t"
                       "beq        12f                         \n\t"
                       "vld1.32    {d24[1]}, [%[dst]]!         \n\t"
                       "vld1.32    {d1}, [%[src]]!             \n\t"
                       
-                      "12:                                        \n\t"
+                      "12:                                    \n\t"
                       "tst        %[count], #1                \n\t"
                       "beq        11f                         \n\t"
                       "vld1.16    {d24[1]}, [%[dst]]!         \n\t"
                       "vld1.32    {d0[1]}, [%[src]]!          \n\t"
                       
-                      "11:                                        \n\t"
+                      "11:                                    \n\t"
                       // unzips achieve the same as a vld4 operation
                       "vuzpq.u16  q0, q1                      \n\t"
                       "vuzp.u8    d0, d1                      \n\t"
@@ -182,17 +224,17 @@ static void S32A_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
                       "beq        24f                         \n\t"
                       "vst1.16    {d21}, [%[keep_dst]]!       \n\t"
                       
-                      "24:                                        \n\t"
+                      "24:                                    \n\t"
                       "tst        %[count], #2                \n\t"
                       "beq        22f                         \n\t"
                       "vst1.32    {d20[1]}, [%[keep_dst]]!    \n\t"
                       
-                      "22:                                        \n\t"
+                      "22:                                    \n\t"
                       "tst        %[count], #1                \n\t"
                       "beq        21f                         \n\t"
                       "vst1.16    {d20[1]}, [%[keep_dst]]!    \n\t"
                       
-                      "21:                                        \n\t"
+                      "21:                                    \n\t"
                       : [count] "+r" (count)
                       : [dst] "r" (dst), [keep_dst] "r" (keep_dst), [src] "r" (src)
                       : "ip", "cc", "memory", "d0","d1","d2","d3","d4","d5","d6","d7",
@@ -438,7 +480,11 @@ static void S32A_Opaque_BlitRow32_neon(SkPMColor* SK_RESTRICT dst,
 
     SkASSERT(255 == alpha);
     if (count > 0) {
-
+#ifdef OMAP_ENHANCEMENT
+    //Every iteration processes 16 bytes of data
+    __builtin_prefetch (src);
+    __builtin_prefetch (dst);
+#endif
 
 	uint8x8_t alpha_mask;
 
@@ -450,8 +496,8 @@ static void S32A_Opaque_BlitRow32_neon(SkPMColor* SK_RESTRICT dst,
 	while (count >= UNROLL) {
 	    uint8x8_t src_raw, dst_raw, dst_final;
 	    uint8x8_t src_raw_2, dst_raw_2, dst_final_2;
-
-	    /* get the source */
+#ifndef OMAP_ENHANCEMENT
+        /* get the source */
 	    src_raw = vreinterpret_u8_u32(vld1_u32(src));
 #if	UNROLL > 2
 	    src_raw_2 = vreinterpret_u8_u32(vld1_u32(src+2));
@@ -526,7 +572,74 @@ static void S32A_Opaque_BlitRow32_neon(SkPMColor* SK_RESTRICT dst,
 #if	UNROLL > 2
 	    vst1_u32(dst+2, vreinterpret_u32_u8(dst_final_2));
 #endif
+#else
+            uint8x8_t dst_cooked;
+            uint16x8_t dst_wide;
+            uint8x8_t alpha_narrow;
+            uint16x8_t alpha_wide;
 
+            //Every iteration processes 16 bytes of data
+            //Preloading in advance for next iteration
+            __builtin_prefetch (src + (UNROLL));
+            __builtin_prefetch (dst + (UNROLL));
+
+
+            /* get the source */
+            src_raw = vreinterpret_u8_u32(vld1_u32(src));
+            src_raw_2 = vreinterpret_u8_u32(vld1_u32(src+2));
+
+            /* get and hold the dst too */
+            dst_raw = vreinterpret_u8_u32(vld1_u32(dst));
+            dst_raw_2 = vreinterpret_u8_u32(vld1_u32(dst+2));
+
+           /*********************************/
+           /* 1st and 2nd bits of the unrolling */
+           /*********************************/
+            /* get the alphas spread out properly */
+            alpha_narrow = vtbl1_u8(src_raw, alpha_mask);
+#if 1
+            /* reflect SkAlpha255To256() semantics a+1 vs a+a>>7 */
+            /* we collapsed (255-a)+1 ... */
+            alpha_wide = vsubw_u8(vdupq_n_u16(256), alpha_narrow);
+#else
+            alpha_wide = vsubw_u8(vdupq_n_u16(255), alpha_narrow);
+            alpha_wide = vaddq_u16(alpha_wide, vshrq_n_u16(alpha_wide,7));
+#endif
+            /* spread the dest */
+            dst_wide = vmovl_u8(dst_raw);
+
+            /* alpha mul the dest */
+            dst_wide = vmulq_u16 (dst_wide, alpha_wide);
+            dst_cooked = vshrn_n_u16(dst_wide, 8);
+
+            /* sum -- ignoring any byte lane overflows */
+            dst_final = vadd_u8(src_raw, dst_cooked);
+            vst1_u32(dst, vreinterpret_u32_u8(dst_final));
+
+           /*********************************/
+           /* the 3rd and 4th bits of our unrolling */
+           /*********************************/
+           /* get the alphas spread out properly */
+            alpha_narrow = vtbl1_u8(src_raw_2, alpha_mask);
+#if 1
+            /* reflect SkAlpha255To256() semantics a+1 vs a+a>>7 */
+            /* we collapsed (255-a)+1 ... */
+            alpha_wide = vsubw_u8(vdupq_n_u16(256), alpha_narrow);
+#else
+            alpha_wide = vsubw_u8(vdupq_n_u16(255), alpha_narrow);
+            alpha_wide = vaddq_u16(alpha_wide, vshrq_n_u16(alpha_wide,7));
+#endif
+            /* spread the dest */
+            dst_wide = vmovl_u8(dst_raw_2);
+
+            /* alpha mul the dest */
+            dst_wide = vmulq_u16 (dst_wide, alpha_wide);
+            dst_cooked = vshrn_n_u16(dst_wide, 8);
+
+            /* sum -- ignoring any byte lane overflows */
+            dst_final_2 = vadd_u8(src_raw_2, dst_cooked);
+            vst1_u32(dst+2, vreinterpret_u32_u8(dst_final_2));
+#endif
 	    src += UNROLL;
 	    dst += UNROLL;
 	    count -= UNROLL;
@@ -554,7 +667,11 @@ static void S32A_Opaque_BlitRow32_neon(SkPMColor* SK_RESTRICT dst,
     }
 }
 
-#define	S32A_Opaque_BlitRow32_PROC	S32A_Opaque_BlitRow32_neon
+#ifdef OMAP_ENHANCEMENT
+#define S32A_Opaque_BlitRow32_PROC  S32A_Opaque_BlitRow32_neon2
+#else
+#define S32A_Opaque_BlitRow32_PROC  S32A_Opaque_BlitRow32_neon
+#endif
 
 #else
 
@@ -916,6 +1033,12 @@ static void S32A_D565_Opaque_Dither_neon (uint16_t * SK_RESTRICT dst,
 #define	UNROLL	8
 
     if (count >= UNROLL) {
+#ifdef OMAP_ENHANCEMENT
+        //Every iteration processes 4*8 bytes of data
+        //Note src is a pointer to an integer
+        __builtin_prefetch (src);
+#endif
+
 	uint8x8_t dbase;
 
 #if	defined(DEBUG_OPAQUE_DITHER)
@@ -997,6 +1120,18 @@ static void S32A_D565_Opaque_Dither_neon (uint16_t * SK_RESTRICT dst,
                     );
 		    sr = d0; sg = d1; sb = d2; sa = d3;
 	    }
+
+#ifdef OMAP_ENHANCEMENT
+#ifdef TARGET_OMAP4
+            //Every iteration processes 4*8 bytes of data
+           //Note src is a pointer to an integer
+           __builtin_prefetch (src + (UNROLL) + (UNROLL*0));
+           __builtin_prefetch (src + (UNROLL) + (UNROLL*1));
+#else
+           __builtin_prefetch (src + (UNROLL*2) + (UNROLL*0));
+           __builtin_prefetch (src + (UNROLL*2) + (UNROLL*2*1));
+#endif
+#endif
 
 	    /* calculate 'd', which will be 0..7 */
 	    /* dbase[] is 0..7; alpha is 0..256; 16 bits suffice */
