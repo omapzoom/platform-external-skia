@@ -26,7 +26,12 @@
 #include "FontHostConfiguration_android.h"
 #include <stdio.h>
 
+#ifdef OMAP_ENHANCEMENT
+//To improve zoomin and zoomout performance
+#define FONT_CACHE_MEMORY_BUDGET    (768 * 1024 * 4)
+#else
 #define FONT_CACHE_MEMORY_BUDGET    (768 * 1024)
+#endif
 
 #ifndef SK_FONT_FILE_PREFIX
     #define SK_FONT_FILE_PREFIX          "/fonts/"

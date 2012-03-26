@@ -272,7 +272,7 @@ void SkRGB16_Black_Blitter::blitAntiH(int x, int y,
         device += count;
     }
 }
-#endif
+#endif //USE_BLACK_BLITTER
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -397,7 +397,11 @@ void SkRGB16_Opaque_Blitter::blitMask(const SkMask& SK_RESTRICT mask,
 
 #ifdef SK_USE_NEON
 #define	UNROLL	8
+#ifdef OMAP_ENHANCEMENT
+    uint16_t* SK_RESTRICT keep_device = NULL;
+#endif
     do {
+#ifndef OMAP_ENHANCEMENT
         int w = width;
         if (w >= UNROLL) {
             uint32x4_t color;		/* can use same one */
@@ -463,6 +467,197 @@ void SkRGB16_Opaque_Blitter::blitMask(const SkMask& SK_RESTRICT mask,
                 w -= UNROLL;
             } while (w >= UNROLL);
         }
+#else
+        int32_t  w = width;
+        if (w >= UNROLL) {
+            asm volatile (
+#ifdef TARGET_OMAP4
+                          "pld   [%[alpha]]                        \n\t"
+                          "pld   [%[device], #(0 * 32)]            \n\t"
+                          "pld   [%[device], #(1 * 32)]            \n\t"
+#else
+                          "pld   [%[alpha]]                        \n\t"
+                          "pld   [%[device], #(0 * 64)]            \n\t"
+#endif
+                          "movw   r5, #63519                       \n\t"
+                          "vdup.32   q4, r5                        \n\t"  // set up 0x0000F81F (~SK_G16_MASK_IN_PLACE)
+                          "movw   r5, #2016                        \n\t"
+                          "vdup.32   q5, r5                        \n\t"  // set up 0x000007E0 (SK_G16_MASK_IN_PLACE)
+                          "vdup.32    q6, %[expanded32]            \n\t" //color
+
+                          //loop
+                          "3:                                      \n\t"
+                          /* alpha is 8x8, widen and split to get pair of 16x4's */
+                          "vld1.8   {d0}, [%[alpha]]!              \n\t"
+                          "vmovl.u8  q0, d0                        \n\t"
+                          "vshr.u16  q2, q0, #7                    \n\t"
+                          "vadd.u16  q0, q0, q2                    \n\t"
+                          "vshr.u16  q0, q0, #3                    \n\t"//alpha_lo=d0 and alpha_hi=d1
+
+                          "mov        %[keep_device], %[device]    \n\t"
+                          "vld1.16  {d2},[%[device]] !             \n\t"
+                          "vmovl.u16  q1, d2                       \n\t"  //dev_lo
+                          "vld1.16  {d4},[%[device]]!              \n\t"
+                          "vmovl.u16  q2, d4                       \n\t"  //dev_hi
+
+#ifdef TARGET_OMAP4
+                          "pld   [%[alpha]]                        \n\t"
+                          "pld   [%[device], #(0 * 32)]            \n\t"
+                          "pld   [%[device], #(1 * 32)]            \n\t"
+#else
+                          "pld   [%[alpha]]                        \n\t"
+                          "pld   [%[device], #(0 * 64)]            \n\t"
+#endif
+
+                          /* unpack in 32 bits */
+                          "vand  q7, q1, q4                        \n\t"
+                          "vand  q8, q1, q5                        \n\t"
+                          "vshl.i32  q8, q8, #16                   \n\t"
+                          "vorr  q1, q7, q8                        \n\t"
+
+                          "vand  q7, q2, q4                        \n\t"
+                          "vand  q8, q2, q5                        \n\t"
+                          "vshl.i32  q8, q8, #16                   \n\t"
+                          "vorr  q2, q7, q8                        \n\t"
+
+                          /* blend the two */
+                          "vsub.i32  q7, q6, q1                    \n\t"
+                          "vmovl.u16  q8, d0                       \n\t"
+                          "vmul.i32  q8, q7, q8                    \n\t"
+                          "vshr.u32  q8, q8, #5                    \n\t"
+                          "vadd.i32  q1, q1, q8                    \n\t"
+
+                          "vsub.i32  q7, q6, q2                    \n\t"
+                          "vmovl.u16  q8, d1                       \n\t"
+                          "vmul.i32  q8, q7, q8                    \n\t"
+                          "vshr.u32  q8, q8, #5                    \n\t"
+                          "vadd.i32  q2, q2, q8                    \n\t"
+
+                          /* re-compact and store */
+                          "vand  q7, q1, q4                        \n\t"
+                          "vshr.u32  q1, q1, #16                   \n\t"
+                          "vand  q1, q1, q5                        \n\t"
+                          "vorr  q1, q7, q1                        \n\t"
+                          "vmovn.i32  d0, q1                       \n\t"
+                          "vst1.16 {d0}, [%[keep_device]]!         \n\t"
+
+                          "vand  q7, q2, q4                        \n\t"
+                          "vshr.u32  q2, q2, #16                   \n\t"
+                          "vand  q2, q2, q5                        \n\t"
+                          "vorr  q2, q7, q2                        \n\t"
+                          "vmovn.i32  d1, q2                       \n\t"
+                          "vst1.16 {d1}, [%[keep_device]]!         \n\t"
+
+                          "subs %[w], %[w], #8                     \n\t"
+                          "cmp %[w], #8                            \n\t"
+                          "bge 3b                                  \n\t"
+
+                          : [w] "+r" (w), [device] "+r" (device), [keep_device] "+r" (keep_device), [alpha] "+r" (alpha), [expanded32] "+r" (expanded32)
+                          :
+                          : "cc", "memory", "r5", "d0", "d1", "d2", "d3", "d4", "d5", "d8","d9","d10","d11","d12","d13","d14","d15","d16","d17"
+                          );
+        }
+
+        if ((w >= (UNROLL/2)) && (height > 1)) {
+            if (width < UNROLL) { /*Only preload if not done by previous if condition*/
+                __builtin_prefetch (device);
+                __builtin_prefetch ((uint16_t*)((char*)device + deviceRB));
+                __builtin_prefetch (alpha);
+                __builtin_prefetch (alpha + maskRB);
+            }
+            asm volatile (
+                          "movw   r5, #63519                       \n\t"
+                          "vdup.32   q4, r5                        \n\t"  // set up 0x0000F81F (~SK_G16_MASK_IN_PLACE)
+                          "movw   r5, #2016                        \n\t"
+                          "vdup.32   q5, r5                        \n\t" // set up 0x000007E0 (SK_G16_MASK_IN_PLACE)
+                          "vdup.32    q6, %[expanded32]            \n\t" //color
+                          "mov   r5, %[w]                          \n\t"
+                          "mov  %[keep_device], %[device]          \n\t"
+                          "b   3f                                  \n\t"
+
+                          //loop
+                          "2:                                      \n\t"
+                          "add %[keep_device], %[keep_device],  %[w], LSL#1  \n\t"
+                          "vld1.16  {d2},[%[keep_device]]          \n\t"
+                          "vmovl.u16  q1, d2                       \n\t"  //dev_lo
+                          /*Store the previously processed array result */
+                          "vst1.16 {d16}, [%[device]]              \n\t"
+                          "cmp  %[w],#2                            \n\t"
+                          "bgt   5f                                \n\t"
+                          "blt    6f                               \n\t"
+                          "vext.16  d0, d0, d1, #2                 \n\t"
+                          "b   4f                                  \n\t"
+                          //loop
+                          "5:                                      \n\t"
+                          "vext.16  d0, d0, d1, #3                 \n\t"
+                          "b   4f                                  \n\t"
+                          //loop
+                          "6:                                      \n\t"
+                          "vext.16  d0, d0, d1, #1                 \n\t"
+                          "b   4f                                  \n\t"
+
+                          //loop
+                          "3:                                      \n\t"
+                          /*Load device*/
+                          "vld1.16  {d2},[%[device]]               \n\t"
+                          "vmovl.u16  q1, d2                       \n\t"  //dev_lo
+
+                          /* alpha is assumed to 8x8, widen and split to get pair of 16x4's */
+                          "vld1.8   {d0}, [%[alpha]]               \n\t"
+                          "vmovl.u8  q0, d0                        \n\t"
+                          "vshr.u16  q7, q0, #7                    \n\t"
+                          "vadd.u16  q0, q0, q7                    \n\t"
+                          "vshr.u16  q0, q0, #3                    \n\t"//alpha_lo=d0 and alpha_hi=d1
+
+                          //loop
+                          "4:                                      \n\t"
+                          /* unpack in 32 bits */
+                          "vand  q7, q1, q4                        \n\t"
+                          "vand  q8, q1, q5                        \n\t"
+                          "vshl.i32  q8, q8, #16                   \n\t"
+                          "vorr  q1, q7, q8                        \n\t"
+
+                          /* blend the two */
+                          "vsub.i32  q7, q6, q1                    \n\t"
+                          "vmovl.u16  q8, d0                       \n\t"
+                          "vmul.i32  q8, q7, q8                    \n\t"
+                          "vshr.u32  q8, q8, #5                    \n\t"
+                          "vadd.i32  q1, q1, q8                    \n\t"
+
+                          /* re-compact and store */
+                          "vand  q7, q1, q4                        \n\t"
+                          "vshr.u32  q1, q1, #16                   \n\t"
+                          "vand  q9, q1, q5                        \n\t"
+                          "vorr  q1, q7, q9                        \n\t"
+                          "vmovn.i32  d16, q1                      \n\t"
+
+                          "subs %[w], %[w], #4                     \n\t"
+                          "cmp %[w], #0                            \n\t"
+                          "bgt 2b                                  \n\t"
+
+                          /*Store the currently processed array result */
+                          "vst1.16 {d16}, [%[keep_device]]         \n\t"
+
+                          /* Last iteration post update of array indices (handle 4 bytes max using sliding) */
+                          "add %[device], %[device], r5, LSL#1     \n\t"
+                          "add %[alpha], %[alpha], r5              \n\t"
+
+                          :  [w] "+r" (w), [device] "+r" (device), [keep_device] "+r" (keep_device), [alpha] "+r" (alpha),  [expanded32] "+r" (expanded32)
+                          :
+                          :  "memory", "r5", "d0", "d1", "d2", "d3", "d8","d9","d10","d11","d12","d13","d14","d15","d16","d17","d18","d19"
+                          );
+        }
+#endif
+
+#ifdef OMAP_ENHANCEMENT
+        if ((w > 0) && (height > 1 )) {
+            __builtin_prefetch (device);
+            __builtin_prefetch ((uint16_t*)((char*)device + deviceRB));
+            __builtin_prefetch (alpha);
+            __builtin_prefetch (alpha + maskRB);
+        }
+#endif
+
         
         /* residuals (which is everything if we have no neon) */
         while (w > 0) {

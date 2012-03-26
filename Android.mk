@@ -207,6 +207,10 @@ LOCAL_SRC_FILES += \
 	src/opts/SkBitmapProcState_opts_arm.cpp \
 	src/opts/opts_check_arm.cpp \
 	src/opts/memset.arm.S
+ifeq ($(OMAP_ENHANCEMENT),true)
+LOCAL_SRC_FILES += \
+	src/opts/S32A_Opaque_BlitRow32_neon2.S
+endif
 else
 LOCAL_SRC_FILES += \
 	src/opts/SkBlitRow_opts_none.cpp \
