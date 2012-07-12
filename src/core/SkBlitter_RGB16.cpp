@@ -889,8 +889,24 @@ void SkRGB16_Blitter::blitRect(int x, int y, int width, int height) {
         struct bvbuffdesc srcdesc, dstdesc;
         struct bvsurfgeom srcgeom, dstgeom;
 
-        uint16_t src16 = SkPixel32ToPixel16(fSrcColor32);
-        int alpha = SkGetPackedA32(fSrcColor32);
+        SkColor nonPMSrcColor;
+        int alpha = fSrcColor32 >> 24;
+        int r = fSrcColor32 & 0xFF;
+        int g = (fSrcColor32 >> 8) & 0xFF;
+        int b = (fSrcColor32 >> 16) & 0xFF;
+
+        int nR, nG, nB;
+        nR = r * 256 / alpha;
+        if(nR >255)
+            nR = 255;
+        nB = b * 256 / alpha;
+        if(nB >255)
+            nB = 255;
+        nG = g * 256 / alpha;
+        if(nG >255)
+            nG = 255;
+
+        nonPMSrcColor = (nR << 16) | (nG << 8) | nB;
         int operation = 0;
 
         memset(&params, 0, sizeof(params));
@@ -936,15 +952,15 @@ void SkRGB16_Blitter::blitRect(int x, int y, int width, int height) {
 
         srcgeom.width = 1;
         srcgeom.height = 1;
-        srcgeom.virtstride = srcgeom.width * sizeof(src16);
+        srcgeom.virtstride = srcgeom.width * sizeof(nonPMSrcColor);
 
-        srcdesc.virtaddr = &src16;
+        srcdesc.virtaddr = &nonPMSrcColor;
         srcdesc.length = srcgeom.virtstride * srcgeom.height;
 
         dstdesc.virtaddr = fDevice.getAddr16(0, 0);
         dstdesc.length = dstgeom.virtstride * dstgeom.height;
 
-        srcgeom.format = OCDFMT_RGB16;
+        srcgeom.format = OCDFMT_BGRx24;
         dstgeom.format = OCDFMT_RGB16;
 
         if(srcdesc.virtaddr == 0 || dstdesc.virtaddr == 0) {
