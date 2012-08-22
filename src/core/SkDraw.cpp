@@ -1318,6 +1318,13 @@ void SkDraw::drawBitmap(const SkBitmap& bitmap, const SkMatrix& prematrix,
             goto SKIA;
         }
 
+        if (devRect.fLeft != (float)((int)devRect.fLeft) ||
+            devRect.fTop != (float)((int)devRect.fTop) ||
+            devRect.fRight != (float)((int)devRect.fRight) ||
+            devRect.fBottom != (float)((int)devRect.fBottom)) {
+                goto SKIA;
+        }
+
         if(hbvlib && scaleOrTranslate && supportedSrcFormat && supportedDstFormat
            && supportedPaint && supportedClip && !flip) {
 
