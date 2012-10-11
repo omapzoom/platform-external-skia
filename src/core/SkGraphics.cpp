@@ -5,7 +5,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
+#ifdef BLTSVILLE_ENHANCEMENT
+#include <dlfcn.h>
+#include <bltsville.h>
+#endif
 
 #include "SkGraphics.h"
 
@@ -51,11 +54,40 @@ void SkGraphics::GetVersion(int32_t* major, int32_t* minor, int32_t* patch) {
     extern void SkRadialGradient_BuildTable();
 #endif
 
+#ifdef BLTSVILLE_ENHANCEMENT
+void *hbvlib = NULL;
+BVFN_MAP bv_map = NULL;
+BVFN_BLT bv_blt = NULL;
+BVFN_UNMAP bv_unmap = NULL;
+#endif
+
 void SkGraphics::Init() {
 #if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
     SkFlattenable::InitializeFlattenables();
     SkPixelRef::InitializeFlattenables();
 #endif
+
+#ifdef BLTSVILLE_ENHANCEMENT
+    if (hbvlib == NULL) {
+        hbvlib = dlopen("libbltsville_cpu.so", RTLD_LOCAL | RTLD_LAZY);
+        if (hbvlib) {
+            SkDebugf("SkGraphics::Init() - BLTsville (CPU) dlopen success");
+            bv_map = (BVFN_MAP)dlsym(hbvlib, "bv_map");
+            bv_blt = (BVFN_BLT)dlsym(hbvlib, "bv_blt");
+            bv_unmap = (BVFN_UNMAP)dlsym(hbvlib, "bv_unmap");
+            if (!bv_map || !bv_blt || !bv_unmap) {
+                SkDebugf("SkGraphics::Init() - dlsym() imports failed!");
+                dlclose(hbvlib);
+                hbvlib = NULL;
+            }
+        }
+
+        if (!hbvlib) {
+            SkDebugf("SkGraphics::Init() - BLTsville (CPU) dlopen() or dlsym() failed - %s", dlerror());
+        }
+    }
+#endif
+
 #ifdef BUILD_EMBOSS_TABLE
     SkEmbossMask_BuildTable();
 #endif
@@ -127,6 +159,17 @@ void SkGraphics::Init() {
 #include "SkTypefaceCache.h"
 
 void SkGraphics::Term() {
+#ifdef BLTSVILLE_ENHANCEMENT
+    if (hbvlib) {
+        SkDebugf("SkGraphics::Term() dlclose() BLTsville (CPU) ");
+        dlclose(hbvlib);
+        hbvlib = NULL;
+        bv_map = NULL;
+        bv_blt = NULL;
+        bv_unmap = NULL;
+    }
+#endif
+
     PurgeFontCache();
 }
 
